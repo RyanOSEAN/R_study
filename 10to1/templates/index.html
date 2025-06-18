@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>열일바다청소 데이터 분석</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'NanumGothic', sans-serif;
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 800px;
+            margin: 30px auto;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+        }
+        h1 {
+            color: #0d6efd;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .upload-area {
+            border: 2px dashed #0d6efd;
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
+            margin-bottom: 20px;
+            transition: all 0.3s;
+            background-color: #f8f9fa;
+        }
+        .upload-area:hover, .upload-area.dragover {
+            background-color: #e9ecef;
+            border-color: #0b5ed7;
+        }
+        .upload-icon {
+            font-size: 48px;
+            color: #0d6efd;
+            margin-bottom: 15px;
+        }
+        .file-list {
+            margin-top: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            margin-bottom: 5px;
+        }
+        .file-name {
+            flex-grow: 1;
+            margin-right: 10px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .file-remove {
+            color: #dc3545;
+            cursor: pointer;
+            font-size: 18px;
+        }
+        .submit-btn {
+            width: 100%;
+            padding: 10px;
+            font-size: 18px;
+            margin-top: 20px;
+        }
+        .instructions {
+            margin-top: 30px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        .instructions h4 {
+            color: #0d6efd;
+            margin-bottom: 10px;
+        }
+        .badge-container {
+            margin-bottom: 15px;
+        }
+        .hidden-input {
+            display: none;
+        }
+        .upload-btn {
+            background-color: #0d6efd;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background-color 0.3s;
+        }
+        .upload-btn:hover {
+            background-color: #0b5ed7;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>열일바다청소 데이터 분석</h1>
+        
+        <div class="badge-container">
+            <span class="badge bg-primary">엑셀 파일 업로드</span>
+            <span class="badge bg-info">사진 최대 3장</span>
+        </div>
+        
+        <form action="/upload" method="post" enctype="multipart/form-data" id="upload-form">
+            <div class="upload-area" id="drop-area">
+                <div class="upload-icon">📊</div>
+                <h4>파일을 여기에 드래그 앤 드롭하세요</h4>
+                <p>또는</p>
+                <button type="button" class="upload-btn" id="file-select-btn">파일 선택하기</button>
+                <input type="file" name="files" id="file-input" class="hidden-input" multiple accept=".xlsx,.xls,.jpg,.jpeg,.png">
+                <div class="file-list" id="file-list"></div>
+            </div>
+            
+            <button type="submit" class="btn btn-primary submit-btn" id="submit-btn" disabled>분석 시작</button>
+        </form>
+        
+        <div class="instructions">
+            <h4>사용 방법</h4>
+            <ol>
+                <li>엑셀 파일(.xlsx, .xls)을 드래그 앤 드롭하거나 <strong>파일 선택하기</strong> 버튼을 클릭하여 선택하세요.</li>
+                <li>필요한 경우 사진 파일(.jpg, .png)을 최대 3장까지 함께 업로드할 수 있습니다.</li>
+                <li>여러 엑셀 파일을 업로드하면 각각 개별적으로 분석됩니다.</li>
+                <li>분석 시작 버튼을 클릭하면 자동으로 데이터가 정제되고 분석됩니다.</li>
+                <li>분석이 완료되면 결과 페이지에서 시각화 자료를 확인하고 PDF 보고서를 다운로드할 수 있습니다.</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const dropArea = document.getElementById('drop-area');
+            const fileInput = document.getElementById('file-input');
+            const fileList = document.getElementById('file-list');
+            const submitBtn = document.getElementById('submit-btn');
+            const fileSelectBtn = document.getElementById('file-select-btn');
+            const uploadForm = document.getElementById('upload-form');
+            
+            let files = [];
+            const maxImages = {{ max_images }};
+            
+            // 파일 선택 버튼 클릭 시 파일 입력 필드 클릭
+            fileSelectBtn.addEventListener('click', function() {
+                fileInput.click();
+            });
+            
+            // 파일 입력 필드 변경 시 파일 처리
+            fileInput.addEventListener('change', function(e) {
+                handleFiles(e.target.files);
+            });
+            
+            // 드래그 앤 드롭 이벤트 처리
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropArea.addEventListener(eventName, preventDefaults, false);
+            });
+            
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropArea.addEventListener(eventName, highlight, false);
+            });
+            
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropArea.addEventListener(eventName, unhighlight, false);
+            });
+            
+            function highlight() {
+                dropArea.classList.add('dragover');
+            }
+            
+            function unhighlight() {
+                dropArea.classList.remove('dragover');
+            }
+            
+            dropArea.addEventListener('drop', handleDrop, false);
+            
+            function handleDrop(e) {
+                const dt = e.dataTransfer;
+                const newFiles = dt.files;
+                handleFiles(newFiles);
+            }
+            
+            function handleFiles(newFiles) {
+                let imageCount = files.filter(f => f.type.startsWith('image/')).length;
+                
+                // 파일 배열에 추가
+                for (let i = 0; i < newFiles.length; i++) {
+                    const file = newFiles[i];
+                    
+                    // 이미지 파일 개수 제한 확인
+                    if (file.type.startsWith('image/') && imageCount >= maxImages) {
+                        alert(`이미지는 최대 ${maxImages}장까지만 업로드할 수 있습니다.`);
+                        continue;
+                    }
+                    
+                    // 파일 확장자 확인
+                    const ext = file.name.split('.').pop().toLowerCase();
+                    if (!['xlsx', 'xls', 'jpg', 'jpeg', 'png'].includes(ext)) {
+                        alert('지원되지 않는 파일 형식입니다. 엑셀(.xlsx, .xls) 또는 이미지(.jpg, .png) 파일만 업로드 가능합니다.');
+                        continue;
+                    }
+                    
+                    // 중복 파일 확인
+                    if (files.some(f => f.name === file.name && f.size === file.size)) {
+                        continue;
+                    }
+                    
+                    files.push(file);
+                    if (file.type.startsWith('image/')) {
+                        imageCount++;
+                    }
+                }
+                
+                updateFileList();
+                updateSubmitButton();
+            }
+            
+            function updateFileList() {
+                fileList.innerHTML = '';
+                
+                files.forEach((file, index) => {
+                    const fileItem = document.createElement('div');
+                    fileItem.className = 'file-item';
+                    
+                    const fileName = document.createElement('div');
+                    fileName.className = 'file-name';
+                    fileName.textContent = file.name;
+                    
+                    const fileType = file.type.startsWith('image/') ? '📷' : '📊';
+                    fileName.textContent = `${fileType} ${file.name}`;
+                    
+                    const removeBtn = document.createElement('div');
+                    removeBtn.className = 'file-remove';
+                    removeBtn.innerHTML = '&times;';
+                    removeBtn.addEventListener('click', function() {
+                        files.splice(index, 1);
+                        updateFileList();
+                        updateSubmitButton();
+                    });
+                    
+                    fileItem.appendChild(fileName);
+                    fileItem.appendChild(removeBtn);
+                    fileList.appendChild(fileItem);
+                });
+            }
+            
+            function updateSubmitButton() {
+                // 엑셀 파일이 하나 이상 있는지 확인
+                const hasExcel = files.some(file => {
+                    const ext = file.name.split('.').pop().toLowerCase();
+                    return ['xlsx', 'xls'].includes(ext);
+                });
+                
+                submitBtn.disabled = !hasExcel;
+            }
+            
+            uploadForm.addEventListener('submit', function(e) {
+                if (files.length === 0) {
+                    e.preventDefault();
+                    alert('업로드할 파일을 선택해주세요.');
+                    return;
+                }
+                
+                // FormData 객체 생성 및 파일 추가
+                const formData = new FormData();
+                files.forEach(file => {
+                    formData.append('files', file);
+                });
+                
+                // 기존 form 요소의 action과 method 사용
+                const xhr = new XMLHttpRequest();
+                xhr.open(uploadForm.method, uploadForm.action, true);
+                
+                // 로딩 표시
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 분석 중...';
+                
+                xhr.onload = function() {
+                    if (xhr.status === 200) {
+                        try {
+                            // JSON 응답 파싱
+                            const response = JSON.parse(xhr.responseText);
+                            
+                            if (response.status === 'success' && response.redirect_url) {
+                                // 성공 시 결과 페이지로 이동
+                                window.location.href = response.redirect_url;
+                            } else if (response.status === 'error') {
+                                // 서버에서 반환한 오류 메시지 표시
+                                alert('오류 발생: ' + (response.message || '파일 처리 중 오류가 발생했습니다.'));
+                                submitBtn.disabled = false;
+                                submitBtn.textContent = '분석 시작';
+                            } else {
+                                // 기존 방식 (responseURL이 있는 경우)
+                                window.location.href = xhr.responseURL;
+                            }
+                        } catch (e) {
+                            // JSON 파싱 실패 시 기존 방식으로 처리
+                            console.error('JSON 파싱 오류:', e);
+                            alert('응답 처리 중 오류가 발생했습니다: ' + e.message);
+                            window.location.href = xhr.responseURL;
+                        }
+                    } else if (xhr.status === 302 || xhr.status === 303 || xhr.status === 307) {
+                        // 리다이렉트 응답 처리
+                        window.location.href = xhr.getResponseHeader('Location') || xhr.responseURL;
+                    } else {
+                        // 상세 오류 메시지 표시
+                        alert('파일 업로드 중 오류가 발생했습니다. 상태 코드: ' + xhr.status + 
+                              (xhr.responseText ? '\n\n' + xhr.responseText : ''));
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = '분석 시작';
+                    }
+                };
+                
+                // 네트워크 오류 처리
+                xhr.onerror = function() {
+                    alert('네트워크 오류가 발생했습니다. 다시 시도해주세요.');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '분석 시작';
+                };
+                
+                xhr.send(formData);
+                e.preventDefault();
+            });
+        });
+    </script>
+</body>
+</html>
